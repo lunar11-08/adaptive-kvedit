@@ -97,9 +97,10 @@ Baseline reproduction, PIE-Bench background preservation (PSNR ↑ / LPIPS×1e3 
 Adaptive masks on the 20 dev images: better than KV-Edit when the given mask is too big or a box,
 about 2 dB worse with clean masks. Preliminary; the 100-image test run and ablations are pending.
 
-Known issues:
-- PIE-Bench masks contain a 1-px border frame, which distorts the `box`/`dilate` perturbations.
-- The adaptive mask works per 16×16 token, coarser at edges than KV-Edit's per-channel mask.
+The numbers above predate two fixes (rerun pending):
+- PIE-Bench masks contain a 1-px image frame; it is now removed from the methods' input masks (kept for
+  scoring, as in the PnPInversion protocol). It had turned every `box` mask into the full image.
+- The adaptive mask now keeps the user mask's sub-token edges instead of whole 16×16 tokens.
 
 ## Limitations and future work
 

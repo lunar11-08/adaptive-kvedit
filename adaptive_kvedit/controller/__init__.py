@@ -1,4 +1,5 @@
 """Builds the per-step packed mask list for one editing method."""
+import torch
 from torch import Tensor
 
 from ..models.editing_backbone import pack_pixel_mask, packed_to_token_mask, token_mask_to_packed
@@ -6,6 +7,13 @@ from .adaptive_mask import ControllerConfig, attention_only_mask, finalize, fuse
 from .schedule import constant, nested_masks, threshold_schedule
 
 MODES = ("user", "attn", "fused", "fused_sched")
+
+
+def _to_packed(token_mask: Tensor, user_packed: Tensor) -> Tensor:
+    """Token mask -> packed; tokens inside the user mask keep its sub-token (per-channel) edges."""
+    p = token_mask_to_packed(token_mask).to(user_packed)
+    in_user = user_packed.sum(2, keepdim=True) > 0.5
+    return torch.where(in_user, p * user_packed, p)
 
 
 def build_schedule(mode: str, user_pixel_mask: Tensor, attn_map: Tensor | None, height: int, width: int,
@@ -29,17 +37,17 @@ def build_schedule(mode: str, user_pixel_mask: Tensor, attn_map: Tensor | None, 
     if mode == "attn":
         m = attention_only_mask(attn_n, user_tok, cfg)
         debug["final"] = m
-        return constant(token_mask_to_packed(m), n_steps), debug
+        return constant(_to_packed(m, user_packed), n_steps), debug
 
     score = fused_score(user_tok, attn_n, cfg)
     debug["score"] = score
     if mode == "fused":
         m = finalize(score > cfg.tau_tight, user_tok, cfg)
         debug["final"] = m
-        return constant(token_mask_to_packed(m), n_steps), debug
+        return constant(_to_packed(m, user_packed), n_steps), debug
     if mode == "fused_sched":
         taus = threshold_schedule(n_steps, cfg.tau_loose, cfg.tau_tight, cfg.sched_start, cfg.sched_end)
         masks = nested_masks(score, user_tok, taus, cfg)
         debug["loose"], debug["final"] = masks[0], masks[-1]
-        return [token_mask_to_packed(m) for m in masks], debug
+        return [_to_packed(m, user_packed) for m in masks], debug
     raise ValueError(f"unknown mode {mode!r}; expected one of {MODES}")

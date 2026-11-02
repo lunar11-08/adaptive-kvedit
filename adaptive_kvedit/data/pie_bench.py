@@ -43,14 +43,14 @@ class PieSample:
 
 
 def mask_decode(encoded: list[int], shape=(512, 512), border: bool = False) -> np.ndarray:
-    """PnPInversion RLE. border=True reproduces their eval quirk (frame counted as edit region)."""
+    """PnPInversion RLE. The data has a 1-px image frame baked in: border=True keeps it (their eval
+    protocol, frame counted as edit region), border=False removes it (the actual object mask)."""
     n = shape[0] * shape[1]
     m = np.zeros(n, dtype=np.uint8)
     for start, length in zip(encoded[0::2], encoded[1::2]):
         m[start:min(start + length, n)] = 1
     m = m.reshape(shape)
-    if border:
-        m[0, :] = m[-1, :] = m[:, 0] = m[:, -1] = 1
+    m[0, :] = m[-1, :] = m[:, 0] = m[:, -1] = int(border)
     return m
 
 
@@ -94,5 +94,5 @@ def dev_subset(samples: list[PieSample], n_dev: int, n_test: int = 100, seed: in
                max_mask_frac: float = 0.9) -> list[PieSample]:
     """Tuning images disjoint from stratified_subset(samples, n_test, seed); skips near-full masks."""
     test = {s.key for s in stratified_subset(samples, n_test, seed)}
-    rest = [s for s in samples if s.key not in test and s.mask().mean() < max_mask_frac]
+    rest = [s for s in samples if s.key not in test and s.mask(border=True).mean() < max_mask_frac]
     return stratified_subset(rest, n_dev, seed + 1)

@@ -182,6 +182,16 @@ def test_fusion_shrinks_dilated_mask_toward_attention():
     assert iou(final, obj) > 0.8
 
 
+def test_adaptive_mask_keeps_user_edges():
+    px = torch.zeros(1, 1, 64, 64)
+    px[..., 10:37, 12:29] = 1                          # not aligned to 16-px tokens
+    cfg = ControllerConfig(w_user=1.0, tau_tight=0.5, tau_loose=0.5, dilate_tokens=0, smooth=1, close_tokens=0)
+    attn = torch.zeros(16)
+    user = build_schedule("user", px, None, 64, 64, 2, cfg)[0][0]
+    for mode in ("fused", "fused_sched"):
+        assert torch.equal(build_schedule(mode, px, attn, 64, 64, 2, cfg)[0][-1], user)
+
+
 def test_text_token_indices():
     class Tok:                                         # 1 token per 3 characters, sentencepiece-like
         def __call__(self, text, add_special_tokens=False):
@@ -196,9 +206,12 @@ def test_text_token_indices():
 
 
 def test_pie_mask_and_perturbations():
-    m = mask_decode([10, 5, 100, 3], (16, 16))
-    assert m.sum() == 8 and m.flat[10:15].all()
+    m = mask_decode([40, 5, 100, 3], (16, 16))
+    assert m.sum() == 8 and m.flat[40:45].all()
     assert mask_decode([], (16, 16), border=True).sum() == 60
+    framed = mask_decode([0, 16, 40, 5, 240, 16], (16, 16))  # top/bottom frame rows + object
+    assert framed.sum() == 5                                  # PIE's baked-in frame is removed
+    assert perturb_mask(framed, "box").sum() == 5             # so box = object box, not whole image
     base = np.zeros((64, 64), np.uint8)
     base[20:40, 25:35] = 1
     assert perturb_mask(base, "dilate", 4).sum() > base.sum()
