@@ -105,5 +105,5 @@ The numbers above predate two fixes (rerun pending):
 ## Limitations and future work
 
 - Attention is from one probe pass per step on the inverted latent, not from the edit trajectory.
-- Masks are binary per step; soft latent blending is the alternative (roadmap week 5).
+- Masks are binary per step; soft latent blending is the alternative.
 - Deferred: DINOv2 feature fusion, CLIP/dense-CLIP relevance, layer-adaptive control.
