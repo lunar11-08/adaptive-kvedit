@@ -1,0 +1,10 @@
+method,psnr,lpips_1e3,mse_1e4,ssim_1e2,clip_whole,clip_edited,source
+VAE reconstruction,37.65,7.93,3.86,,,,KV-Edit paper Table 1 (PIE-Bench 620 img no style)
+P2P,17.86,208.43,219.22,,,,KV-Edit paper Table 1
+MasaCtrl,22.20,105.74,86.15,,,,KV-Edit paper Table 1
+RF-Inversion,20.20,179.73,139.85,,,,KV-Edit paper Table 1
+RF-Edit,24.44,113.20,56.26,,,,KV-Edit paper Table 1
+BrushEdit,32.16,17.22,8.46,,,,KV-Edit paper Table 1
+FLUX Fill,32.53,25.59,8.55,,,,KV-Edit paper Table 1
+KV-Edit (paper),35.87,9.92,4.69,,,,KV-Edit paper Table 1
+KV-Edit +NS+RI (paper),33.30,14.80,7.45,,,,KV-Edit paper Table 1

@@ -1,0 +1,53 @@
+pie_root: data/PIE-Bench_v1
+seed: 0                       # subset sampling
+
+backbone:
+  name: flux-dev
+  device: cuda
+  precision: fp8              # fp8 (16 GB GPU; run scripts/convert_fp8.py once) | bf16 (original)
+  fp8_dir: checkpoints/flux-dev-fp8
+  offload: none               # none | model (bf16, ~26GB) | blocks (bf16, any GPU, slow)
+  text_cache: cache/text      # prompt embeddings; T5/CLIP never share the GPU with FLUX
+  feature_store: disk         # ram (~17GB/img at 512px) | disk
+  feature_dir: cache/features # spill dir; fast local SSD
+  pin_memory: false
+
+sampling:                     # KV-Edit demo defaults; check against the paper's PIE-Bench settings
+  num_steps: 28
+  skip_step: 4
+  inversion_guidance: 1.5
+  denoise_guidance: 5.5
+  attn_scale: 1.0
+  re_init: false
+  seed: 42
+
+attention:
+  probe_steps: [2, 6, 10]     # indices into the (post-skip) denoise schedule
+  token_source: auto          # target | source | auto (target, else source for e.g. deletions)
+  use_blended_word: true      # also attend to PIE-Bench blended_word
+  head_chunk: 4
+  select:                     # which recorded maps form the attention map (re-selectable offline)
+    steps: null               # null = all probe steps
+    double: all               # all | none | [block ids]
+    single: all
+
+controller:
+  w_user: 0.4
+  tau_tight: 0.5
+  tau_loose: 0.3
+  dilate_tokens: 3
+  smooth: 3
+  norm_quantile: 0.98
+  attn_only_tau: null
+  close_tokens: 1
+  min_tokens: 4
+  sched_start: 0.2
+  sched_end: 0.7
+
+mask_noise_radius: 24         # px, for dilate/erode
+
+methods:                      # mode: user | attn | fused | fused_sched; optional controller overrides
+  kvedit:      {mode: user}
+  attn:        {mode: attn}
+  fused:       {mode: fused}
+  fused_sched: {mode: fused_sched}

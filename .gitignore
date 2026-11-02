@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+runs/
+data/PIE-Bench*/
+feature_cache/
+*.pt
+logs/
+cache/
+checkpoints/
+.pytest_cache/
+# machine-specific GPU helper, not part of the project
+scripts/with_free_gpu.sh
