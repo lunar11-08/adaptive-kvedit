@@ -94,16 +94,32 @@ Baseline reproduction, PIE-Bench background preservation (PSNR ↑ / LPIPS×1e3 
 | KV-Edit, paper (620 images) | 35.87 | 9.92 | 4.69 |
 | KV-Edit, this repo (20 dev images, FP8) | 36.15 | 9.69 | 4.36 |
 
-Adaptive masks on the 20 dev images: better than KV-Edit when the given mask is too big or a box,
-about 2 dB worse with clean masks. Preliminary; the 100-image test run and ablations are pending.
+Adaptive mask (`fused_sched`, tuned) vs KV-Edit on the 20 dev images, per input mask
+(`runs/dev_v2`, `runs/dev_v2_tuned`; tuned settings: `w_user=0.6, tau 0.6→0.7`):
 
-The numbers above predate two fixes (rerun pending):
-- PIE-Bench masks contain a 1-px image frame; it is now removed from the methods' input masks (kept for
-  scoring, as in the PnPInversion protocol). It had turned every `box` mask into the full image.
-- The adaptive mask now keeps the user mask's sub-token edges instead of whole 16×16 tokens.
+| Mask given | KV-Edit PSNR | Ours PSNR | KV-Edit LPIPS | Ours LPIPS | Ours wins (LPIPS) | CLIP edited KV / ours |
+|---|---|---|---|---|---|---|
+| clean | **36.15** | 35.82 | **9.69** | 10.07 | 20% | 19.84 / 19.99 |
+| too small (erode 24 px) | **37.25** | 37.11 | **7.89** | 7.97 | 20% | 19.21 / 19.31 |
+| too big (dilate 24 px) | 29.93 | **30.21** | 27.46 | **24.33** | 60% | 20.55 / 20.76 |
+| bounding box | 30.00 | **30.81** | 39.37 | **28.94** | 70% | 20.48 / 20.54 |
+
+- Loose masks: ours preserves more background (box: +0.8 dB PSNR, −27% LPIPS); edit success (CLIP) unchanged.
+- Clean / too-small masks: about even (−0.1 to −0.3 dB). The tuned controller only trims masks, never grows them.
+- Remaining clean-mask gap: the hole-filling step (`close_tokens=1`) adds a few whole tokens just outside
+  the user mask (final mask ≈ 1.02× the given one).
+- Preliminary: 20 images, and the same images were used for tuning, so this is optimistic and not
+  statistically significant (box LPIPS: 14/20 wins). The 100-image test run is pending.
+
+History: an earlier version lost ~2 dB on clean masks. Two fixes closed most of that gap:
+PIE-Bench masks contain a 1-px image frame, now removed from the methods' input (kept for scoring, as in
+the PnPInversion protocol; it had turned every `box` mask into the full image), and the adaptive mask now
+keeps the user mask's sub-token edges instead of whole 16×16 tokens.
 
 ## Limitations and future work
 
+- The tuned controller only shrinks masks; too-small masks are not corrected.
+- Hole filling can add tokens outside the user mask; restricting it to the user mask may close the clean-mask gap.
 - Attention is from one probe pass per step on the inverted latent, not from the edit trajectory.
 - Masks are binary per step; soft latent blending is the alternative.
 - Deferred: DINOv2 feature fusion, CLIP/dense-CLIP relevance, layer-adaptive control.
