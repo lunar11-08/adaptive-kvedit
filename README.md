@@ -117,6 +117,25 @@ Each image is edited with the ground-truth mask and three rough versions of it (
   material changes and deletions); on those the final mask is 4–7% larger than the given one, because the
   hole-filling step (`close_tokens=1`) adds whole tokens just outside the user mask.
 
+### Examples
+
+Selected test images where ours does best and the edit worked for both methods; they are not typical
+of every image (averages are in the table above). Columns: original with the true edit area in green,
+the rough mask given to both methods (red), KV-Edit, ours, and our corrected mask (blue).
+
+**Box mask.** KV-Edit redraws the whole box, so people, animals and scenery around the edit change; ours
+trims the box and keeps them:
+
+![Box-mask examples](docs/figures/examples_box_mask.jpg)
+
+**Mask 24 px too big:**
+
+![Too-big-mask examples](docs/figures/examples_too_big_mask.jpg)
+
+To rebuild them, or browse all 100 test images: `python scripts/compare_sheets.py --kvedit runs/test
+--ours runs/test --metrics runs/test/metrics.csv --noise box --keys 122000000004 622000000002
+822000000002 121000000007 --out runs/test/examples` (leave out `--keys` for every image).
+
 ### Dev set: 20 images (used for tuning)
 
 Same comparison on the 20 dev images (`runs/dev_v2`, `runs/dev_v2_tuned`). These images were used to

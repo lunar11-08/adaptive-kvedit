@@ -49,13 +49,21 @@ def main():
     ap.add_argument("--noise", nargs="+", default=["box", "dilate", "none"])
     ap.add_argument("--pie-root", default="data/PIE-Bench_v1")
     ap.add_argument("--per-page", type=int, default=5)
+    ap.add_argument("--keys", nargs="*", help="only these images, in this order")
+    ap.add_argument("--metrics", help="metrics.csv with both methods: adds PSNR/LPIPS under each caption")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
     samples = {s.key: s for s in load_pie_bench(args.pie_root)}
     ours_root, kv_root, out = Path(args.ours), Path(args.kvedit), Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    keys = sorted(p.parent.name for p in ours_root.glob("*/source.png"))
+    keys = args.keys or sorted(p.parent.name for p in ours_root.glob("*/source.png"))
+    scores = {}
+    if args.metrics:
+        import pandas as pd
+        df = pd.read_csv(args.metrics, dtype={"key": str})
+        for r in df.itertuples():
+            scores[(r.key.zfill(12), r.noise, r.method)] = (r.psnr, r.lpips_1e3)
     cols = ["Original (green = true edit area)", "Mask given to both methods", "KV-Edit result",
             "Our result", "Our corrected mask"]
     written = []
@@ -79,7 +87,12 @@ def main():
                 corrected = tint(src, z["final"], (40, 140, 255))
                 y = head + r * row_h
                 caption = f"{CATEGORIES.get(s.category, s.category)}:  \"{s.source_clean}\"  →  \"{s.target_clean}\""
-                d.text((8, y + 4), "\n".join(textwrap.wrap(caption, 150)[:2]), fill="black", font=font(14))
+                lines = textwrap.wrap(caption, 150)[:2]
+                kv_s, us_s = scores.get((k, nz, "kvedit")), scores.get((k, nz, "fused_sched"))
+                if kv_s and us_s:
+                    lines = lines[:1] + [f"Background PSNR: KV-Edit {kv_s[0]:.1f} → ours {us_s[0]:.1f}   ·   "
+                                         f"LPIPS×1e3: KV-Edit {kv_s[1]:.0f} → ours {us_s[1]:.0f}"]
+                d.text((8, y + 4), "\n".join(lines), fill="black", font=font(14))
                 for c, im in enumerate([outline(src, gt, (0, 255, 0)), outline(given, gt, (0, 255, 0)),
                                         kv, ours, outline(corrected, gt, (0, 255, 0))]):
                     sheet.paste(tile(im), (c * S, y + 44))
