@@ -87,15 +87,40 @@ numbers into `configs/reported_baselines.csv` and `comparison.py` appends them.
 
 ## Results (work in progress)
 
-Baseline reproduction, PIE-Bench background preservation (PSNR ↑ / LPIPS×1e3 ↓ / MSE×1e4 ↓):
+PIE-Bench, background preservation outside the ground-truth mask (PSNR ↑ / LPIPS×1e3 ↓ / MSE×1e4 ↓).
+Style edits have full-image masks, so no background, and are left out of these metrics.
+
+Baseline reproduction:
 
 | | PSNR | LPIPS | MSE |
 |---|---|---|---|
 | KV-Edit, paper (620 images) | 35.87 | 9.92 | 4.69 |
-| KV-Edit, this repo (20 dev images, FP8) | 36.15 | 9.69 | 4.36 |
+| KV-Edit, this repo (100 test images, FP8) | 35.66 | 8.04 | 4.63 |
 
-Adaptive mask (`fused_sched`, tuned) vs KV-Edit on the 20 dev images, per input mask
-(`runs/dev_v2`, `runs/dev_v2_tuned`; tuned settings: `w_user=0.6, tau 0.6→0.7`):
+### Test set: 100 images
+
+Adaptive mask (`fused_sched`) vs KV-Edit on 100 stratified test images (10 per category, disjoint from
+the dev images), settings fixed from dev tuning (`runs/dev_v2/tuned.yaml`: `w_user=0.6, tau 0.6→0.7`).
+Each image is edited with the ground-truth mask and three rough versions of it (`runs/test`):
+
+| Mask given | KV-Edit PSNR | Ours PSNR | KV-Edit LPIPS | Ours LPIPS | Ours wins (LPIPS) | CLIP edited KV / ours |
+|---|---|---|---|---|---|---|
+| clean | **35.66** | 35.09 | **8.04** | 8.25 | 31% | 22.50 / 22.53 |
+| too small (erode 24 px) | **37.43** | 37.31 | **6.31** | 6.47 | 23% | 21.29 / 21.21 |
+| too big (dilate 24 px) | 28.76 | **29.93** | 25.25 | **19.95** | 62% | 22.77 / 22.60 |
+| bounding box | 27.22 | **29.17** | 48.59 | **28.40** | 65% | 22.96 / 22.65 |
+
+- Rough masks: ours preserves much more background (box: +1.95 dB PSNR, −42% LPIPS; too big: +1.2 dB,
+  −21% LPIPS), at a small cost in edit score (box CLIP −0.3).
+- Too-small masks: tie. The tuned controller only trims masks, never grows them.
+- Clean masks: ours is 0.57 dB lower on average. Most images are close, but about 10 lose 3–6 dB (mostly
+  material changes and deletions); on those the final mask is 4–7% larger than the given one, because the
+  hole-filling step (`close_tokens=1`) adds whole tokens just outside the user mask.
+
+### Dev set: 20 images (used for tuning)
+
+Same comparison on the 20 dev images (`runs/dev_v2`, `runs/dev_v2_tuned`). These images were used to
+pick the settings, so the results are optimistic:
 
 | Mask given | KV-Edit PSNR | Ours PSNR | KV-Edit LPIPS | Ours LPIPS | Ours wins (LPIPS) | CLIP edited KV / ours |
 |---|---|---|---|---|---|---|
@@ -104,14 +129,7 @@ Adaptive mask (`fused_sched`, tuned) vs KV-Edit on the 20 dev images, per input 
 | too big (dilate 24 px) | 29.93 | **30.21** | 27.46 | **24.33** | 60% | 20.55 / 20.76 |
 | bounding box | 30.00 | **30.81** | 39.37 | **28.94** | 70% | 20.48 / 20.54 |
 
-- Loose masks: ours preserves more background (box: +0.8 dB PSNR, −27% LPIPS); edit success (CLIP) unchanged.
-- Clean / too-small masks: about even (−0.1 to −0.3 dB). The tuned controller only trims masks, never grows them.
-- Remaining clean-mask gap: the hole-filling step (`close_tokens=1`) adds a few whole tokens just outside
-  the user mask (final mask ≈ 1.02× the given one).
-- Preliminary: 20 images, and the same images were used for tuning, so this is optimistic and not
-  statistically significant (box LPIPS: 14/20 wins). The 100-image test run is pending.
-
-History: an earlier version lost ~2 dB on clean masks. Two fixes closed most of that gap:
+History: an earlier version lost ~2 dB on clean dev masks. Two fixes closed most of that gap:
 PIE-Bench masks contain a 1-px image frame, now removed from the methods' input (kept for scoring, as in
 the PnPInversion protocol; it had turned every `box` mask into the full image), and the adaptive mask now
 keeps the user mask's sub-token edges instead of whole 16×16 tokens.
@@ -119,7 +137,9 @@ keeps the user mask's sub-token edges instead of whole 16×16 tokens.
 ## Limitations and future work
 
 - The tuned controller only shrinks masks; too-small masks are not corrected.
-- Hole filling can add tokens outside the user mask; restricting it to the user mask may close the clean-mask gap.
+- Hole filling can add tokens outside the user mask; restricting it to the user mask may close the
+  clean-mask gap (to be checked on the dev set before rerunning the test set).
+- Trimming the mask slightly lowers the edit score with rough masks (box CLIP −0.3).
 - Attention is from one probe pass per step on the inverted latent, not from the edit trajectory.
 - Masks are binary per step; soft latent blending is the alternative.
 - Deferred: DINOv2 feature fusion, CLIP/dense-CLIP relevance, layer-adaptive control.
