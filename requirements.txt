@@ -1,5 +1,6 @@
 # torch: install the build matching your CUDA driver first (e.g. cu124 for driver 12.4)
 -r third_party/KV-Edit/requirements.txt
+pydantic<2.11      # gradio 5.17 (pinned by KV-Edit) crashes with newer pydantic
 torchmetrics>=1.4
 pandas
 tabulate
