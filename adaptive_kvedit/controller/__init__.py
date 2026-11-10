@@ -42,7 +42,7 @@ def build_schedule(mode: str, user_pixel_mask: Tensor, attn_map: Tensor | None, 
     score = fused_score(user_tok, attn_n, cfg)
     debug["score"] = score
     if mode == "fused":
-        m = finalize(score > cfg.tau_tight, user_tok, cfg)
+        m = finalize(score > cfg.tau_tight, user_tok, cfg, fill_within=user_tok)
         debug["final"] = m
         return constant(_to_packed(m, user_packed), n_steps), debug
     if mode == "fused_sched":

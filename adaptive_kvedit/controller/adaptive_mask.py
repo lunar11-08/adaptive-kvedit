@@ -63,8 +63,11 @@ def fused_score(user: Tensor, attn_n: Tensor, cfg: ControllerConfig) -> Tensor:
     return (cfg.w_user * user.float() + (1 - cfg.w_user) * attn_n) * allowed
 
 
-def finalize(m: Tensor, user: Tensor, cfg: ControllerConfig) -> Tensor:
-    m = close(m.float(), cfg.close_tokens)
+def finalize(m: Tensor, user: Tensor, cfg: ControllerConfig, fill_within: Tensor | None = None) -> Tensor:
+    """Fill holes (closing); with fill_within, filled tokens must lie inside it."""
+    m = m.float()
+    filled = close(m, cfg.close_tokens)
+    m = filled if fill_within is None else torch.maximum(m, filled * fill_within.float())
     if m.sum() < cfg.min_tokens:
         m = user.float()
     if m.all():

@@ -18,7 +18,7 @@ def nested_masks(score: Tensor, user: Tensor, taus: list[float], cfg: Controller
     """Binary masks score > tau_i, forced to shrink monotonically so the regenerated set is fixed."""
     out, prev = [], None
     for tau in taus:
-        m = finalize(score > tau, user, cfg)
+        m = finalize(score > tau, user, cfg, fill_within=user)
         if prev is not None:
             m = m * prev
             if m.sum() == 0:

@@ -192,6 +192,17 @@ def test_adaptive_mask_keeps_user_edges():
         assert torch.equal(build_schedule(mode, px, attn, 64, 64, 2, cfg)[0][-1], user)
 
 
+def test_hole_filling_stays_inside_user_mask():
+    px = torch.zeros(1, 1, 256, 256)
+    px[..., 64:192, 64:96] = px[..., 64:192, 128:160] = px[..., 64:96, 64:160] = 1   # U shape, 2-token notch
+    cfg = ControllerConfig(w_user=1.0, tau_tight=0.5, tau_loose=0.5, dilate_tokens=2, smooth=1, close_tokens=1)
+    attn = torch.zeros(256)
+    user = build_schedule("user", px, None, 256, 256, 2, cfg)[1]["user"]
+    for mode in ("fused", "fused_sched"):
+        final = build_schedule(mode, px, attn, 256, 256, 2, cfg)[1]["final"]
+        assert torch.equal(final, user)                  # closing would otherwise fill the notch
+
+
 def test_text_token_indices():
     class Tok:                                         # 1 token per 3 characters, sentencepiece-like
         def __call__(self, text, add_special_tokens=False):
