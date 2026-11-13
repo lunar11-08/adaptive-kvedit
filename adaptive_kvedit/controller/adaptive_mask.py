@@ -19,6 +19,7 @@ class ControllerConfig:
     min_tokens: int = 4          # fall back to the user mask below this
     sched_start: float = 0.2     # fraction of steps held at tau_loose
     sched_end: float = 0.7       # fraction of steps where tau_tight is reached
+    keep_mask_on_removal: bool = True    # object removal: use the user mask as-is (no trimming)
 
 
 def dilate(m: Tensor, r: int) -> Tensor:

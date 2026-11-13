@@ -58,7 +58,7 @@ class Demo:
             raise gr.Error("GPU out of memory: try a smaller image (--max-side)")
         return f"inverted ({img.shape[1]}×{img.shape[0]})"
 
-    def edit(self, canvas, target_prompt, mode, w_user, tau_tight, tau_loose, guidance, attn_scale):
+    def edit(self, canvas, target_prompt, mode, removal, w_user, tau_tight, tau_loose, guidance, attn_scale):
         if self.state is None:
             raise gr.Error("run Inverse first")
         H, W = self.image.shape[:2]
@@ -77,6 +77,10 @@ class Demo:
 
         attn, heat = None, None
         tok = edit_token_indices(self.bb.tokenizer, target_prompt)
+        cc = controller_config(self.cfg)
+        cc.w_user, cc.tau_tight, cc.tau_loose = w_user, tau_tight, tau_loose
+        if removal and cc.keep_mask_on_removal:
+            mode = "user"                                     # no trimming, so skip the attention probe
         if mode != "user" and tok:
             rec = AttentionRecorder(self.bb.model, tok)
             self.bb.probe(self.state, inp_tgt, self.cfg["attention"]["probe_steps"], rec, guidance)
@@ -84,8 +88,6 @@ class Demo:
             heat = overlay(self.image, attn.reshape(H // 16, W // 16).float().cpu().numpy())
         if attn is None:
             mode = "user"
-        cc = controller_config(self.cfg)
-        cc.w_user, cc.tau_tight, cc.tau_loose = w_user, tau_tight, tau_loose
         sched, dbg = build_schedule(mode, user, attn, H, W, len(self.state.timesteps) - 1, cc)
         out = self.bb.decode(self.bb.edit(self.state, inp_tgt, sched, self.opts), H, W)
         final = overlay(self.image, dbg.get("final", dbg["user"]).float().cpu().numpy(), cmap="magma")
@@ -108,6 +110,7 @@ def build(demo: Demo):
                 status = gr.Textbox(label="Status", interactive=False)
             with gr.Column():
                 mode = gr.Dropdown(list(MODES), value="fused_sched", label="Mask mode")
+                removal = gr.Checkbox(label="Object removal (use the mask as drawn, no trimming)", value=False)
                 c = demo.cfg["controller"]
                 w_user = gr.Slider(0, 1, c["w_user"], step=0.05, label="w_user")
                 tau_tight = gr.Slider(0, 1, c["tau_tight"], step=0.05, label="tau_tight")
@@ -120,7 +123,7 @@ def build(demo: Demo):
                     heat = gr.Image(label="Edit-token attention")
                     final = gr.Image(label="Final mask")
         inv_btn.click(demo.invert, [canvas, src, steps, skip], [status])
-        edit_btn.click(demo.edit, [canvas, tgt, mode, w_user, tau_tight, tau_loose, guidance, attn_scale],
+        edit_btn.click(demo.edit, [canvas, tgt, mode, removal, w_user, tau_tight, tau_loose, guidance, attn_scale],
                        [out, heat, final])
     return ui
 

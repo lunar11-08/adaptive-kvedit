@@ -126,13 +126,15 @@ def run_sample(bb, s, d, state, inp_src, inp_tgt, H, W, jobs, methods, cfg, opts
             print(f"  {s.key}: no edit tokens, adaptive modes fall back to the user mask")
 
     base_mask = s.mask((H, W), border=False)
+    removal = s.category == "3"                 # delete_object
+    meta["removal"] = removal
     for nz, m in jobs:
         t1 = time.time()
         um = perturb_mask(base_mask, nz, cfg.get("mask_noise_radius", 24))
         um_t = torch.from_numpy(um).float()[None, None].to(bb.device)
         mode = methods[m]["mode"] if attn_map is not None else "user"
         sched, dbg = build_schedule(mode, um_t, attn_map, H, W, len(state.timesteps) - 1,
-                                    controller_config(cfg, methods[m]))
+                                    controller_config(cfg, methods[m]), removal=removal)
         z = bb.edit(state, inp_tgt, sched, opts)
         Image.fromarray(bb.decode(z, H, W)).save(d / f"{m}__{nz}.png")
         np.savez_compressed(d / f"{m}__{nz}_masks.npz", user_px=um,

@@ -14,6 +14,10 @@ Denoise with KV-Edit, regenerating tokens with `s > τ_loose` early and shrinkin
 (per-step binarisation, which fits KV-Edit's fixed token set). With a constant user mask this is
 bit-identical to KV-Edit (`tests/test_cpu_pipeline.py::test_matches_original_kvedit`).
 
+Object removal is the exception: the whole object must be redrawn, so trimming would leave parts of it
+behind. Removals (PIE-Bench `delete_object`, or the demo's "Object removal" checkbox) use the user mask
+as-is, exactly like KV-Edit (`controller.keep_mask_on_removal`).
+
 ## Layout
 
 ```
@@ -102,24 +106,26 @@ Baseline reproduction:
 Adaptive mask (`fused_sched`) vs KV-Edit on 100 stratified test images (10 per category, disjoint from
 the dev images), settings fixed from dev tuning (`runs/dev_v2/tuned.yaml`: `w_user=0.6, tau 0.6→0.7`).
 Each image is edited with the ground-truth mask and three rough versions of it. KV-Edit: `runs/test`;
-ours, with hole filling kept inside the user mask: `runs/test_v2`.
+ours: `runs/test_v2` (hole filling kept inside the user mask) with the 10 removal images rerun in
+`runs/test_v3_removal` (no trimming on removals).
 
 | Mask given | KV-Edit PSNR | Ours PSNR | KV-Edit LPIPS | Ours LPIPS | Ours better / same / worse | CLIP edited KV / ours |
 |---|---|---|---|---|---|---|
-| clean | 35.66 | **36.02** | 8.04 | **7.53** | 47 / 24 / 7 | 22.50 / 22.26 |
-| too small (erode 24 px) | 37.43 | **37.45** | 6.31 | **6.29** | 22 / 50 / 6 | 21.29 / 21.19 |
-| too big (dilate 24 px) | 28.76 | **30.15** | 25.25 | **18.93** | 68 / 6 / 4 | 22.77 / 22.53 |
-| bounding box | 27.22 | **29.19** | 48.59 | **28.22** | 64 / 9 / 5 | 22.96 / 22.65 |
+| clean | 35.66 | **36.00** | 8.04 | **7.56** | 42 / 30 / 6 | 22.50 / 22.32 |
+| too small (erode 24 px) | 37.43 | **37.45** | 6.31 | **6.29** | 20 / 53 / 5 | 21.29 / 21.20 |
+| too big (dilate 24 px) | 28.76 | **30.05** | 25.25 | **19.40** | 59 / 15 / 4 | 22.77 / 22.60 |
+| bounding box | 27.22 | **29.06** | 48.59 | **32.03** | 55 / 18 / 5 | 22.96 / 22.73 |
 
-Better / same / worse counts images by LPIPS, out of the 78 non-style images.
+Better / same / worse counts images by LPIPS, out of the 78 non-style images (removals count as "same":
+they are pixel-identical to KV-Edit).
 
-- Rough masks: ours preserves much more background (box: +2.0 dB PSNR, −42% LPIPS; too big: +1.4 dB,
-  −25% LPIPS).
-- Clean masks: ours is also slightly better (+0.36 dB), because it drops edge tokens the edit does not need.
+- Ours is better than or equal to KV-Edit with every mask type.
+- Rough masks: ours preserves much more background (box: +1.8 dB PSNR, −34% LPIPS; too big: +1.3 dB,
+  −23% LPIPS).
+- Clean masks: ours is also slightly better (+0.34 dB), because it drops edge tokens the edit does not need.
 - Too-small masks: tie. The tuned controller only trims masks, never grows them.
 - No image gets noticeably worse: the largest PSNR loss on any image is 0.2 dB.
-- Cost: a slightly lower edit score (CLIP edited −0.1 to −0.3). In a few deletions, trimming the mask
-  also keeps part of the object that should be removed.
+- Cost: a slightly lower edit score (CLIP edited −0.1 to −0.2).
 
 ### Examples
 
@@ -140,10 +146,18 @@ and keeps them:
 
 ![Clean-mask example](docs/figures/examples_clean_mask.jpg)
 
-To rebuild them, or browse all 100 test images (merge both methods' rows into one metrics file first):
-`python scripts/compare_sheets.py --kvedit runs/test --ours runs/test_v2 --metrics
-runs/test_v2/metrics_vs_kvedit.csv --noise box --keys 122000000004 821000000009 813000000000
---out runs/test_v2/examples` (leave out `--keys` for every image).
+**Object removal: ours before vs after the removal rule.** Trimming kept parts of the bottle, the cat
+and the painting; now the whole mask is redrawn, as in KV-Edit. The background score drops, but the
+object is actually removed:
+
+![Removal before/after](docs/figures/removal_before_after.jpg)
+
+To rebuild them, or browse all 100 test images: `runs/test_final` links each image's final result
+(`runs/test_v2`, or `runs/test_v3_removal` for removals), and `metrics_vs_kvedit.csv` holds both
+methods' rows. `python scripts/compare_sheets.py --kvedit runs/test --ours runs/test_final --metrics
+runs/test_final/metrics_vs_kvedit.csv --noise box --keys 122000000004 821000000009 813000000000
+--out runs/test_final/examples` (leave out `--keys` for every image; `--kvedit runs/test_v2
+--kvedit-method fused_sched --kvedit-label "Ours before"` compares two of our runs).
 
 ### Dev set: 20 images (used for tuning)
 
@@ -167,12 +181,17 @@ History of the clean-mask PSNR gap to KV-Edit:
    (`close_tokens=1`) added whole tokens just outside the user mask on 63 of 100 images.
 3. Hole filling now stays inside the user mask (`runs/test_v2`): +0.36 dB, with no image losing more
    than 0.2 dB. Rough-mask gains are kept (box) or grow (too big: +1.2 → +1.4 dB).
+4. Removals use the user mask as-is (`runs/test_v3_removal`). Trimming had left parts of removed
+   objects; the 10 removal images now match KV-Edit exactly. Final: +0.34 dB on clean masks, +1.8 dB
+   with box masks.
 
 ## Limitations and future work
 
 - The tuned controller only shrinks masks; too-small masks are not corrected.
-- Trimming the mask slightly lowers the edit score (CLIP edited −0.1 to −0.3), and in a few deletions
-  keeps part of the object that should be removed.
+- Trimming the mask slightly lowers the edit score (CLIP edited −0.1 to −0.2).
+- Removals gain nothing over KV-Edit: they need to know the edit is a removal (PIE-Bench category or the
+  demo checkbox) and then fall back to the user mask. Trimming with the removed words' attention is
+  possible future work.
 - The final mask is built from 16×16 tokens, so the boundary between kept and regenerated areas can
   show as a faint blocky seam on flat backgrounds.
 - Attention is from one probe pass per step on the inverted latent, not from the edit trajectory.

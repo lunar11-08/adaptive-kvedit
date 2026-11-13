@@ -203,6 +203,23 @@ def test_hole_filling_stays_inside_user_mask():
         assert torch.equal(final, user)                  # closing would otherwise fill the notch
 
 
+def test_removal_keeps_user_mask():
+    px = torch.zeros(1, 1, 128, 128)
+    px[..., 16:112, 16:112] = 1
+    cfg = ControllerConfig(w_user=0.6, tau_tight=0.7, tau_loose=0.6, smooth=1)
+    attn = torch.zeros(8, 8)
+    attn[3:5, 3:5] = 1                                   # attention would trim the mask to the centre
+    attn = attn.flatten()
+    user = build_schedule("user", px, None, 128, 128, 3, cfg)[0]
+    for mode in ("attn", "fused", "fused_sched"):
+        trimmed = build_schedule(mode, px, attn, 128, 128, 3, cfg)[0]
+        assert not torch.equal(trimmed[-1], user[-1])
+        kept = build_schedule(mode, px, attn, 128, 128, 3, cfg, removal=True)[0]
+        assert all(torch.equal(a, b) for a, b in zip(kept, user))
+    cfg.keep_mask_on_removal = False
+    assert not torch.equal(build_schedule("fused_sched", px, attn, 128, 128, 3, cfg, removal=True)[0][-1], user[-1])
+
+
 def test_text_token_indices():
     class Tok:                                         # 1 token per 3 characters, sentencepiece-like
         def __call__(self, text, add_special_tokens=False):

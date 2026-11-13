@@ -43,6 +43,7 @@ controller:
   min_tokens: 4
   sched_start: 0.2
   sched_end: 0.7
+  keep_mask_on_removal: true  # delete_object edits use the user mask as-is
 
 mask_noise_radius: 24         # px, for dilate/erode
 

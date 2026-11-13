@@ -17,17 +17,18 @@ def _to_packed(token_mask: Tensor, user_packed: Tensor) -> Tensor:
 
 
 def build_schedule(mode: str, user_pixel_mask: Tensor, attn_map: Tensor | None, height: int, width: int,
-                   n_steps: int, cfg: ControllerConfig) -> tuple[list[Tensor], dict]:
+                   n_steps: int, cfg: ControllerConfig, removal: bool = False) -> tuple[list[Tensor], dict]:
     """Returns (packed masks per step, debug token grids).
 
-    'user' uses KV-Edit's own pixel packing, so it is the exact baseline.
+    'user' uses KV-Edit's own pixel packing, so it is the exact baseline. With removal=True (and
+    cfg.keep_mask_on_removal) every mode does the same: removing an object needs the whole mask redrawn.
     """
     th, tw = height // 16, width // 16
     user_packed = pack_pixel_mask(user_pixel_mask, height, width)
     user_tok = packed_to_token_mask(user_packed).reshape(th, tw).float()
     debug = {"user": user_tok}
 
-    if mode == "user":
+    if mode == "user" or (removal and cfg.keep_mask_on_removal):
         return constant(user_packed, n_steps), debug
     if attn_map is None:
         raise ValueError(f"mode {mode!r} needs an attention map")
