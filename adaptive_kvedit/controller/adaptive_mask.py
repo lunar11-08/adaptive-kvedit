@@ -51,7 +51,7 @@ def normalize_attention(attn: Tensor, cfg: ControllerConfig) -> Tensor:
 def otsu(x: Tensor, bins: int = 64) -> float:
     hist = torch.histc(x.flatten().float(), bins=bins, min=0, max=1)
     p = hist / hist.sum()
-    centers = (torch.arange(bins, dtype=torch.float32) + 0.5) / bins
+    centers = (torch.arange(bins, dtype=torch.float32, device=x.device) + 0.5) / bins
     w0 = p.cumsum(0)
     mu = (p * centers).cumsum(0)
     between = (mu[-1] * w0 - mu) ** 2 / (w0 * (1 - w0)).clamp_min(1e-12)
